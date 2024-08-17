@@ -1,196 +1,234 @@
-import * as anchor from '@coral-xyz/anchor';
-import { Program } from '@coral-xyz/anchor';
-import { PublicKey, Connection,  } from '@solana/web3.js';
-import { assert } from 'chai';
-import { SolBettingGame } from '../target/types/sol_betting_game';
+import * as anchor from "@project-serum/anchor";
+import { Program } from "@project-serum/anchor";
+import { PublicKey, SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { assert } from "chai";
+import * as Token from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
+import { SolBettingGame } from "../target/types/sol_betting_game";
 
-describe("sol-betting-game", () => {
-  const provider = anchor.AnchorProvider.local();
+describe("sol_betting_game", () => {
+  // Configure the client to use the local cluster.
+  const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const connection = provider.connection;
+
   const program = anchor.workspace.SolBettingGame as Program<SolBettingGame>;
+  let mint: PublicKey;
+  let vaultAccount: PublicKey;
+  let _vaultBump: number;
+  let roundInfo: PublicKey;
+  let winners: PublicKey;
+  let winnersVault: PublicKey;
+  let _winnersVaultBump: number;
+  let config: PublicKey;
+  let owner: Keypair;
+  let players: Keypair[] = [];
+  let playerTokenAccounts: PublicKey[] = [];
+  let configAccount: Keypair;
+  let roundInfoAccount: Keypair;
+  let winnersAccount: Keypair;
 
-  const user1 = anchor.web3.Keypair.generate();
-  const user2 = anchor.web3.Keypair.generate();
-  const user3 = anchor.web3.Keypair.generate();
-
-  let roundAccount: anchor.web3.Keypair;
-  let configAccount: anchor.web3.Keypair;
-  let winnerAccount: anchor.web3.Keypair;
-  let winnerData: any;
   before(async () => {
-    // Фандим тестовые кошельки
-    const lamports = 1_000_000_000_000;
-    const airdropPromises = [user1, user2, user3].map(async (user) =>
-      await connection.requestAirdrop(user.publicKey, lamports)
+    // Создаём аккаунт владельца
+    owner = Keypair.generate();
+    const airdropSignature = await provider.connection.requestAirdrop(owner.publicKey, 100 * LAMPORTS_PER_SOL);
+    await provider.connection.confirmTransaction(airdropSignature);
+
+    // Создаём аккаунты игроков и делаем им airdrop
+    for (let i = 0; i < 3; i++) {
+      const player = Keypair.generate();
+      players.push(player);
+      const airdropSignature = await provider.connection.requestAirdrop(player.publicKey, 100 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(airdropSignature);
+    }
+
+    // Создаём токен mint
+    mint = await Token.createMint(
+      provider.connection,
+      owner,
+      owner.publicKey,
+      null,
+      9,
     );
+    console.log("Mint: ", mint.toString());
 
-    const airdropSignatures = await Promise.all(airdropPromises);
-    await Promise.all(airdropSignatures.map(async (sig) => await connection.confirmTransaction(sig)));
+    // Создаём токен-аккаунты для игроков
+    for (let player of players) {
+      const tokenAccount = await Token.getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        owner,
+        mint,
+        player.publicKey
+      );
+      await Token.mintTo(provider.connection, owner, mint, tokenAccount.address, owner.publicKey, 10000 * LAMPORTS_PER_SOL);
+      playerTokenAccounts.push(tokenAccount.address);
+    }
+    console.log("Player token accounts: ", playerTokenAccounts);
 
-    console.log('Balances after airdrop:');
-    console.log('User1:', await connection.getBalance(user1.publicKey));
-    console.log('User2:', await connection.getBalance(user2.publicKey));
-    console.log('User3:', await connection.getBalance(user3.publicKey));
+    // Инициализируем контракт
+    [vaultAccount, _vaultBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_account")],
+      program.programId
+    );
+    console.log("Vault account: ", vaultAccount.toString());
 
-    // Создаем аккаунты конфигурации и раунда
-    roundAccount = anchor.web3.Keypair.generate();
-    configAccount = anchor.web3.Keypair.generate();
-    winnerAccount = anchor.web3.Keypair.generate();
+    [winnersVault, _winnersVaultBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("winners_vault")],
+      program.programId
+    );
+    console.log("Winners Vault account: ", winnersVault.toString());
 
-    console.log(await program.methods
-      .initialize()
+    configAccount = Keypair.generate();
+    roundInfoAccount = Keypair.generate();
+    winnersAccount = Keypair.generate(); // Аккаунт для хранения данных о победителях
+    config = configAccount.publicKey;
+    roundInfo = roundInfoAccount.publicKey;
+    winners = winnersAccount.publicKey;
+    console.log("Config account: ", configAccount.publicKey.toString());
+    console.log("Round info account: ", roundInfoAccount.publicKey.toString());
+    console.log("Winners account: ", winners.toString());
+
+    const init_tx = await program.methods
+      .initialize(owner.publicKey)
       .accounts({
-        config: configAccount.publicKey,
-        round: roundAccount.publicKey,
-        owner: user1.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
+        roundInfo: roundInfo,
+        config: config,
+        winners: winners, // Аккаунт для хранения данных о победителях
+        owner: owner.publicKey,
+        winnersVault: winnersVault, // PDA для хранения токенов победителей
+        vaultAccount: vaultAccount,
+        mint: mint,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([configAccount, roundAccount, user1])
-      .rpc());
-
-    console.log('Round and Config accounts initialized');
-  });
-
-  it('User1 makes a deposit', async () => {
-    const depositAmount = 100_000_000_000;
-
-    await program.methods
-      .deposit(new anchor.BN(depositAmount))
-      .accounts({
-        round: roundAccount.publicKey,
-        user: user1.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([user1])
+      .signers([roundInfoAccount, configAccount, winnersAccount, owner])
       .rpc();
 
-    const roundData = await program.account.roundInfo.fetch(roundAccount.publicKey);
-    console.log('Total Deposits after User1 deposit:', roundData.totalDeposits.toNumber());
-
-    assert.equal(roundData.totalDeposits.toNumber(), depositAmount, "Total deposits should match User1's deposit");
-    assert.equal(roundData.deposits.length, 1, "Should have exactly one deposit record");
-    assert.equal(roundData.deposits[0].amount.toNumber(), depositAmount, "User1's deposit should match the amount");
+    console.log("tx:", init_tx);
   });
 
-  it('User2 makes a deposit', async () => {
-    const depositAmount = 200_000_000_000;
+  it("allows a player 0 to deposit tokens into the vault", async () => {
+    const amount = 100 * LAMPORTS_PER_SOL;
+    const player = players[0];
+    console.log("player 0 balance: ", (await provider.connection.getBalance(player.publicKey)).toString());
+    const playerTokenAccount = playerTokenAccounts[0];
 
     await program.methods
-      .deposit(new anchor.BN(depositAmount))
+      .deposit(_vaultBump, new anchor.BN(amount))
       .accounts({
-        round: roundAccount.publicKey,
-        user: user2.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
+        vaultAccount: vaultAccount,
+        roundInfo: roundInfo,
+        user: player.publicKey,
+        userTokenAccount: playerTokenAccount,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       })
-      .signers([user2])
+      .signers([player])
       .rpc();
 
-    const roundData = await program.account.roundInfo.fetch(roundAccount.publicKey);
-    console.log('Total Deposits after User2 deposit:', roundData.totalDeposits.toNumber());
-
-    assert.equal(roundData.totalDeposits.toNumber(), 300_000_000_000, "Total deposits should include both User1's and User2's deposits");
-    assert.equal(roundData.deposits.length, 2, "Should have exactly two deposit records");
-    assert.equal(roundData.deposits[1].amount.toNumber(), depositAmount, "User2's deposit should match the amount");
+    const roundInfoData = await program.account.roundInfo.fetch(roundInfo);
+    assert.equal(roundInfoData.totalDeposits.toString(), amount.toString());
   });
 
-  it('User1 makes another deposit', async () => {
-    const additionalDepositAmount = 150_000_000_000;
+  it("allows a player 1 to deposit tokens into the vault", async () => {
+    const amount = 202 * LAMPORTS_PER_SOL;
+    const player = players[1];
+    console.log("player 1 balance: ", (await provider.connection.getBalance(player.publicKey)).toString());
+    const playerTokenAccount = playerTokenAccounts[1];
 
     await program.methods
-      .deposit(new anchor.BN(additionalDepositAmount))
+      .deposit(_vaultBump, new anchor.BN(amount))
       .accounts({
-        round: roundAccount.publicKey,
-        user: user1.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
+        vaultAccount: vaultAccount,
+        roundInfo: roundInfo,
+        user: player.publicKey,
+        userTokenAccount: playerTokenAccount,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       })
-      .signers([user1])
+      .signers([player])
       .rpc();
 
-    const roundData = await program.account.roundInfo.fetch(roundAccount.publicKey);
-    console.log('Total Deposits after User1 makes another deposit:', roundData.totalDeposits.toNumber());
-
-    const expectedTotal = 450_000_000_000; // 100_000_000_000 + 200_000_000_000 + 150_000_000_000
-    const expectedUser1Deposit = 250_000_000_000; // 100_000_000_000 + 150_000_000_000
-
-    assert.equal(roundData.totalDeposits.toNumber(), expectedTotal, "Total deposits should match all deposits");
-    assert.equal(roundData.deposits.length, 2, "Should still have two deposit records, as User1's deposits are merged");
-    assert.equal(roundData.deposits[0].amount.toNumber(), expectedUser1Deposit, "User1's total deposit should match the summed amount");
+    const roundInfoData = await program.account.roundInfo.fetch(roundInfo);
+    assert.equal(roundInfoData.totalDeposits.toString(), (amount + 100 * LAMPORTS_PER_SOL).toString());
   });
 
-  it('User3 makes a deposit', async () => {
-    const depositAmount = 300_000_000_000;
+  it("allows a player 2 to deposit tokens into the vault", async () => {
+    const amount = 303 * LAMPORTS_PER_SOL;
+    const player = players[2];
+    console.log("player 2 balance: ", (await provider.connection.getBalance(player.publicKey)).toString());
+    const playerTokenAccount = playerTokenAccounts[2];
 
     await program.methods
-      .deposit(new anchor.BN(depositAmount))
+      .deposit(_vaultBump, new anchor.BN(amount))
       .accounts({
-        round: roundAccount.publicKey,
-        user: user3.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
+        vaultAccount: vaultAccount,
+        roundInfo: roundInfo,
+        user: player.publicKey,
+        userTokenAccount: playerTokenAccount,
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       })
-      .signers([user3])
+      .signers([player])
       .rpc();
 
-    const roundData = await program.account.roundInfo.fetch(roundAccount.publicKey);
-    console.log('Total Deposits after User3 deposit:', roundData.totalDeposits.toNumber());
-
-    const expectedTotal = 750_000_000_000; // 450_000_000_000 + 300_000_000_000
-
-    assert.equal(roundData.totalDeposits.toNumber(), expectedTotal, "Total deposits should include User3's deposit");
-    assert.equal(roundData.deposits.length, 3, "Should have three deposit records");
-    assert.equal(roundData.deposits[2].amount.toNumber(), depositAmount, "User3's deposit should match the amount");
+    const roundInfoData = await program.account.roundInfo.fetch(roundInfo);
+    assert.equal(roundInfoData.totalDeposits.toString(), (amount + 302 * LAMPORTS_PER_SOL).toString());
   });
 
-  it('Client determines the winner and invokes draw_winner', async () => {
-    // Предположим, что клиент определил, что user2 является победителем
-    const determinedWinner = user2.publicKey;
-  
-    // Вызываем draw_winner с определенным победителем
+  it("draws a winner and distributes the prize", async () => {
+    console.log("winner ", players[0].publicKey.toString());
     await program.methods
-      .drawWinner(determinedWinner)
+      .drawWinner(_winnersVaultBump, players[0].publicKey) // Передаем публичный ключ победителя
       .accounts({
-        config: configAccount.publicKey,
-        round: roundAccount.publicKey,
-        winner: winnerAccount.publicKey,
-        owner: user1.publicKey,  // владелец контракта
-        systemProgram: anchor.web3.SystemProgram.programId,
+        config: config,
+        roundInfo: roundInfo,
+        owner: owner.publicKey,
+        vaultAccount: vaultAccount,
+        winners: winners, // Передаем обычный аккаунт для данных победителей
+        winnersVault: winnersVault, // PDA токенов победителей
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       })
-      .signers([winnerAccount, user1])
+      .signers([owner])
       .rpc();
-  
-    // Получаем данные победителя из аккаунта Winner
-    const winnerData = await program.account.winner.fetch(winnerAccount.publicKey);
-    console.log('Winner Pubkey:', winnerData.winner.toBase58());
-    console.log('Prize Amount:', winnerData.amount.toNumber());
-  
-    // Проверяем, что победитель совпадает с определенным клиентом
-    assert.equal(winnerData.winner.toBase58(), determinedWinner.toBase58(), "Winner should match the determined winner");
-  
-    // Проверяем баланс перед тем, как победитель забирает свой выигрыш
-    const initialWinnerBalance = await connection.getBalance(determinedWinner);
-    console.log('Initial Winner Balance:', initialWinnerBalance);
-  
-    // Победитель забирает свой выигрыш
-    await program.methods
-      .claimReward()
-      .accounts({
-        winner: winnerAccount.publicKey,
-        claimant: determinedWinner,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([user2])  // Убедитесь, что Signer соответствует определенному победителю
-      .rpc();
-  
-    // Проверяем баланс после того, как победитель забрал свой выигрыш
-    const finalWinnerBalance = await connection.getBalance(determinedWinner);
-    console.log('Final Winner Balance:', finalWinnerBalance);
-  
-    const expectedBalance = initialWinnerBalance + winnerData.amount.toNumber();
-  
-    assert.equal(finalWinnerBalance, expectedBalance, "Winner's balance should increase by the prize amount");
-    console.log("Winner has claimed their reward successfully");
   });
-  
-  
-  
+
+  it("allows the winner to claim their reward", async () => {
+    const winner = players[0];
+    const winnerTokenAccount = playerTokenAccounts[0];
+
+    // Проверяем баланс победителя до получения приза
+    const initialBalance = await Token.getAccount(provider.connection, winnerTokenAccount);
+    console.log("Initial balance of winner's token account:", initialBalance.amount.toString());
+    const winnersData = await program.account.winners.fetch(winners);
+    console.log("Winners data: ", winnersData?.records);
+
+    // Выполняем вызов метода claim_reward
+    await program.methods
+      .claimReward(_winnersVaultBump) // Используем bump для PDA
+      .accounts({
+        winners: winners,
+        winnersVault: winnersVault, // PDA токенов победителей
+        user: winner.publicKey,
+        userTokenAccount: winnerTokenAccount, // Указываем аккаунт для получения токенов
+        mint: mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([winner])
+      .rpc();
+
+    // Проверяем баланс победителя после получения приза
+    const finalBalance = await Token.getAccount(provider.connection, winnerTokenAccount);
+    console.log("Final balance of winner's token account:", finalBalance.amount.toString());
+
+    // Убеждаемся, что баланс увеличился на сумму приза
+    const claimedPrizeAmount = finalBalance.amount - initialBalance.amount;
+    console.log("Claimed prize amount:", claimedPrizeAmount.toString());
+
+    assert.isTrue(claimedPrizeAmount > BigInt(0), "Prize should be successfully claimed.");
+  });
 });
