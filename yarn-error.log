@@ -14,7 +14,7 @@ Platform:
   darwin arm64
 
 Trace: 
-  SyntaxError: /Users/rustam/Documents/fuck2/package.json: Expected double-quoted property name in JSON at position 261
+  SyntaxError: /Users/rustam/Documents//package.json: Expected double-quoted property name in JSON at position 261
       at JSON.parse (<anonymous>)
       at /opt/homebrew/lib/node_modules/yarn/lib/cli.js:1629:59
       at Generator.next (<anonymous>)
