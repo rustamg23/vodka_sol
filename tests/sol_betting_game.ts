@@ -181,14 +181,14 @@ describe("sol_betting_game", () => {
   it("draws a winner and distributes the prize", async () => {
     console.log("winner ", players[0].publicKey.toString());
     await program.methods
-      .drawWinner(_winnersVaultBump, players[0].publicKey) // Передаем публичный ключ победителя
+      .drawWinner(_vaultBump, players[0].publicKey) // Передаем публичный ключ победителя
       .accounts({
         config: config,
         roundInfo: roundInfo,
-        owner: owner.publicKey,
         vaultAccount: vaultAccount,
         winners: winners, // Передаем обычный аккаунт для данных победителей
         winnersVault: winnersVault, // PDA токенов победителей
+        owner: owner.publicKey,
         mint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -215,7 +215,6 @@ describe("sol_betting_game", () => {
         winnersVault: winnersVault, // PDA токенов победителей
         user: winner.publicKey,
         userTokenAccount: winnerTokenAccount, // Указываем аккаунт для получения токенов
-        mint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
