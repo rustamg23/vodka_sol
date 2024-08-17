@@ -189,10 +189,11 @@ describe("sol_betting_game", () => {
         vaultAccount: vaultAccount,
         winners: winners, // Передаем обычный аккаунт для данных победителей
         winnersVault: winnersVault, // PDA токенов победителей
+        mint: mint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([owner])
+      .signers([ owner])
       .rpc();
   });
 

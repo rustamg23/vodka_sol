@@ -108,30 +108,34 @@ pub mod sol_betting_game {
         let winners = &mut ctx.accounts.winners;
         let user = &ctx.accounts.user;
     
-        // Проверяем, что игрок является победителем
+        // Поиск записи о победителе
         let winner_record = winners.records.iter().find(|record| record.winner == *user.key);
         require!(winner_record.is_some(), ErrorCode::NoPrize);
     
         let amount = winner_record.unwrap().amount;
         require!(amount > 0, ErrorCode::NoPrize);
     
-        // Подготавливаем контекст для перевода токенов из winners_vault на аккаунт игрока
+        // Сохранение ссылок на необходимые аккаунты перед созданием CpiContext
+        let winners_vault_info = ctx.accounts.winners_vault.to_account_info().clone(); // Клонируем здесь
+        let user_token_account_info = ctx.accounts.user_token_account.to_account_info();
+        let token_program_info = ctx.accounts.token_program.to_account_info();
+    
+        // Перевод токенов победителю
         let cpi_ctx = CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
+            token_program_info,
             token::Transfer {
-                from: ctx.accounts.winners_vault.to_account_info(),
-                to: ctx.accounts.user_token_account.to_account_info(),
-                authority: ctx.accounts.winners_vault.to_account_info(), // PDA выступает authority
+                from: winners_vault_info.clone(), // Используем клон
+                to: user_token_account_info,
+                authority: winners_vault_info, // Используем клон
             },
         );
         token::transfer(cpi_ctx, amount)?;
     
-        // Удаляем запись о победителе после получения приза
+        // Удаление записи о победителе
         winners.records.retain(|record| record.winner != *user.key);
     
         Ok(())
     }
-    
     
     
 }
@@ -206,7 +210,7 @@ pub struct Initialize<'info> {
         seeds = [b"winners_vault"],
         bump,
         token::mint = mint,
-        token::authority = ?????,
+        token::authority = owner,
     )]
     pub winners_vault: Account<'info, TokenAccount>, // PDA токенов для хранения призов
     #[account(
@@ -272,6 +276,7 @@ pub struct DrawWinner<'info> {
     pub system_program: Program<'info, System>,
 }
 
+// Аккаунты для получения приза победителем
 #[derive(Accounts)]
 pub struct ClaimReward<'info> {
     #[account(mut)]
@@ -283,9 +288,10 @@ pub struct ClaimReward<'info> {
     )]
     pub winners_vault: Account<'info, TokenAccount>, // PDA токенов для выигрышей
     #[account(mut)]
-    pub user: Signer<'info>, // Игрок, который забирает приз
+    pub user: Signer<'info>,
     #[account(mut)]
-    pub user_token_account: Account<'info, TokenAccount>, // Аккаунт, на который будут переведены токены
+    pub user_token_account: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
