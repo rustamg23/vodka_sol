@@ -139,6 +139,34 @@ pub mod sol_betting_game {
     
         Ok(())
     }
+
+    pub fn admin_withdraw(ctx: Context<AdminWithdraw>, _bump: u8, amount: u64) -> Result<()> {
+        let config = &ctx.accounts.config;
+        require!(config.owner == *ctx.accounts.owner.key, ErrorCode::Unauthorized);
+    
+        
+        let seeds = &[b"winners_vault".as_ref(), &[_bump]];
+        let signer_seeds = &[&seeds[..]];
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::Transfer {
+                from: ctx.accounts.winners_vault.to_account_info(),
+                to: ctx.accounts.admin_account.to_account_info(),
+                authority: ctx.accounts.winners_vault.to_account_info(),
+            },
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx, amount)?;
+    
+        Ok(())
+    }
+
+    pub fn change_owner(ctx: Context<ChangeOwner>, new_owner: Pubkey) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        require!(config.owner == *ctx.accounts.current_owner.key, ErrorCode::Unauthorized);
+        config.owner = new_owner;
+        Ok(())
+    }
 }
 
 
@@ -256,6 +284,31 @@ pub struct ClaimReward<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct AdminWithdraw<'info> {
+    #[account(mut)]
+    pub config: Account<'info, Config>,
+    #[account(
+        mut,
+        seeds = [b"winners_vault"],
+        bump,
+    )]
+    pub winners_vault: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub admin_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ChangeOwner<'info> {
+    #[account(mut)]
+    pub config: Account<'info, Config>,
+    #[account(mut)]
+    pub current_owner: Signer<'info>,
+}
+
 // Структура конфигурации
 #[account]
 pub struct Config {
@@ -317,4 +370,6 @@ pub enum ErrorCode {
     InvalidWinner,
     #[msg("Already initialized.")]
     AlreadyInitialized,
+    #[msg("The operation is paused.")]
+    Paused,
 }
