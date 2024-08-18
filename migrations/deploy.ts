@@ -1,13 +1,14 @@
 import * as anchor from "@project-serum/anchor";
 import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, MintLayout, createInitializeMintInstruction, createAssociatedTokenAccountInstruction, mintTo } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, MintLayout, createInitializeMintInstruction, createAssociatedTokenAccountInstruction, mintTo, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
 import fs from "fs";
 import path from "path";
 
 async function main() {
     // Установка соединения с локальным узлом Solana
-    const connection = new Connection("http://localhost:8899", "confirmed");
+    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
     console.log("Соединение с локальным узлом установлено");
+    const _deploymentData = JSON.parse(fs.readFileSync(path.resolve(__dirname, "deployment_output.json"), "utf8"));
 
     // Генерация или загрузка ключей для деплоя
     const wallet = anchor.Wallet.local();
@@ -28,13 +29,13 @@ async function main() {
 
     // Генерация аккаунтов
     const [vaultAccount, vaultBump] = await PublicKey.findProgramAddress(
-        [Buffer.from("vault_account")],
+        [Buffer.from("vault_account_vo")],
         programId
     );
     console.log("Vault Account создан:", vaultAccount.toBase58(), "Bump:", vaultBump);
 
     const [winnersVault, winnersVaultBump] = await PublicKey.findProgramAddress(
-        [Buffer.from("winners_vault")],
+        [Buffer.from("winners_vault_vo")],
         programId
     );
     console.log("Winners Vault создан:", winnersVault.toBase58(), "Bump:", winnersVaultBump);
@@ -50,57 +51,66 @@ async function main() {
     console.log("Winners Account:", winnersAccount.publicKey.toBase58());
 
     console.log("Создание нового токена");
-    const mint = Keypair.generate();
+    const mint = _deploymentData.mint;
+    // Keypair.generate();
     console.log("Mint Keypair создан:", mint.publicKey.toBase58());
 
-    const mintRent = await connection.getMinimumBalanceForRentExemption(MintLayout.span);
-    console.log("Mint Rent Exemption:", mintRent);
+    // const mintRent = await connection.getMinimumBalanceForRentExemption(MintLayout.span);
+    // console.log("Mint Rent Exemption:", mintRent);
 
-    const createMintTransaction = new anchor.web3.Transaction().add(
-        SystemProgram.createAccount({
-            fromPubkey: wallet.publicKey,
-            newAccountPubkey: mint.publicKey,
-            lamports: mintRent,
-            space: MintLayout.span,
-            programId: TOKEN_PROGRAM_ID,
-        }),
-        createInitializeMintInstruction(
-            mint.publicKey, // Mint Pubkey
-            9, // Decimals
-            wallet.publicKey, // Mint Authority
-            wallet.publicKey // Freeze Authority
-        )
-    );
+    // const createMintTransaction = new anchor.web3.Transaction().add(
+    //     SystemProgram.createAccount({
+    //         fromPubkey: wallet.publicKey,
+    //         newAccountPubkey: mint.publicKey,
+    //         lamports: mintRent,
+    //         space: MintLayout.span,
+    //         programId: TOKEN_PROGRAM_ID,
+    //     }),
+    //     createInitializeMintInstruction(
+    //         mint.publicKey, // Mint Pubkey
+    //         9, // Decimals
+    //         wallet.publicKey, // Mint Authority
+    //         wallet.publicKey // Freeze Authority
+    //     )
+    // );
 
-    console.log("Отправка транзакции на создание нового токена");
-    await provider.sendAndConfirm(createMintTransaction, [mint]);
+    // console.log("Отправка транзакции на создание нового токена");
+    // await provider.sendAndConfirm(createMintTransaction, [mint]);
 
     console.log("Mint создан:", mint.publicKey.toBase58());
 
     // Создание 4-х кошельков для игроков
     console.log("Генерация 4-х кошельков для игроков");
-    const players = Array.from({ length: 4 }, () => Keypair.generate());
-    players.forEach((player, index) => {
-        console.log(`Player ${index + 1} Public Key: ${player.publicKey.toBase58()}`);
+    // const players = Array.from({ length: 4 }, () => Keypair.generate());
+    // players.forEach((player, index) => {
+    // });
+    
+    const players: {keypair: Keypair, tokenAccount: PublicKey}[] = _deploymentData.players.map((playerData: any) => {
+        const keypair = Keypair.fromSecretKey(Uint8Array.from(playerData.secretKey));
+        console.log(`Player  Public Key: ${playerData.publicKey.toBase58()}`);
+        return {
+            keypair,
+            tokenAccount: new PublicKey(playerData.tokenAccount)
+        };
     });
 
     // Создание токен-аккаунтов для овнера и игроков
     console.log("Создание токен-аккаунтов для овнера и игроков");
 
-    const ownerTokenAccount = await createAssociatedTokenAccount(provider, mint.publicKey, wallet.publicKey);
-    console.log("Owner Token Account создан:", ownerTokenAccount.toBase58());
+    const ownerTokenAccount = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, mint.publicKey, wallet.publicKey);
+    console.log("Owner Token Account создан:", ownerTokenAccount.address.toBase58());
 
     const playerTokenAccounts = [];
     for (let i = 0; i < players.length; i++) {
-        const playerTokenAccount = await createAssociatedTokenAccount(provider, mint.publicKey, players[i].publicKey);
-        console.log(`Player ${i + 1} Token Account создан:`, playerTokenAccount.toBase58());
+        const playerTokenAccount = await getOrCreateAssociatedTokenAccount(provider.connection, players[i].keypair, mint.publicKey, players[i].keypair.publicKey);
+        console.log(`Player ${i + 1} Token Account создан:`, playerTokenAccount.address.toBase58());
         playerTokenAccounts.push(playerTokenAccount);
     }
 
     // Mint токенов овнеру и игрокам
     const mintAmount = 1000 * 10 ** 9; // 1000 токенов с учетом decimals
     console.log("Минтинг токенов овнеру и игрокам");
-    await mintTo(connection, wallet.payer, mint.publicKey, ownerTokenAccount, wallet.publicKey, mintAmount);
+    await mintTo(connection, wallet.payer, mint.publicKey, ownerTokenAccount.address, wallet.publicKey, mintAmount);
     console.log("Овнеру заминчено:", mintAmount);
 
     for (let i = 0; i < players.length; i++) {
@@ -155,11 +165,11 @@ async function main() {
         },
         owner: {
             publicKey: wallet.publicKey.toBase58(),
-            tokenAccount: ownerTokenAccount.toBase58(),
+            tokenAccount: ownerTokenAccount.address.toBase58(),
         },
         players: players.map((player, index) => ({
-            publicKey: player.publicKey.toBase58(),
-            secretKey: Array.from(player.secretKey),
+            publicKey: player.keypair.publicKey.toBase58(),
+            secretKey: Array.from(player.keypair.secretKey),
             tokenAccount: playerTokenAccounts[index].toBase58(),
         })),
     };
@@ -168,28 +178,6 @@ async function main() {
     fs.writeFileSync(outputFilePath, JSON.stringify(deploymentData, null, 2));
     console.log("Все данные о деплое сохранены в файл:", outputFilePath);
 }
-
-async function createAssociatedTokenAccount(provider: anchor.AnchorProvider, mint: PublicKey, owner: PublicKey): Promise<PublicKey> {
-    const associatedTokenAccount = await anchor.utils.token.associatedAddress({ mint, owner });
-    const transaction = new anchor.web3.Transaction().add(
-        createAssociatedTokenAccountInstruction(provider.wallet.publicKey, associatedTokenAccount, owner, mint)
-    );
-    await provider.sendAndConfirm(transaction);
-    return associatedTokenAccount;
-}
-
-// async function mintTo(
-//     provider: anchor.AnchorProvider,
-//     mint: PublicKey,
-//     destination: PublicKey,
-//     authority: PublicKey,
-//     amount: number
-// ): Promise<void> {
-//     const transaction = new anchor.web3.Transaction().add(
-//         anchor.utils.token.createMintToInstruction(mint, destination, authority, amount)
-//     );
-//     await provider.sendAndConfirm(transaction);
-// }
 
 main().then(() => {
     console.log("Скрипт деплоя завершен.");

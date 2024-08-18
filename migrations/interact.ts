@@ -13,7 +13,7 @@ async function main() {
     const deploymentData = JSON.parse(fs.readFileSync(path.resolve(__dirname, "deployment_output.json"), "utf8"));
 
     console.log("Установка соединения и провайдера")
-    const connection = new anchor.web3.Connection("http://localhost:8899", "confirmed");
+    const connection = new anchor.web3.Connection("https://api.devnet.solana.com", "confirmed");
     const wallet = anchor.Wallet.local();
     const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
     anchor.setProvider(provider);

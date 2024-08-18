@@ -75,7 +75,7 @@ pub mod sol_betting_game {
         let winner_exists = round_info.deposits.iter().any(|deposit| deposit.depositor == winner_pubkey);
         require!(winner_exists, ErrorCode::InvalidWinner);
     
-        let seeds = &[b"vault_account".as_ref(), &[_bump]];
+        let seeds = &[b"vault_account_vo".as_ref(), &[_bump]];
         let signer_seeds = &[&seeds[..]];
         // Перевод токенов из vault_account в winners_vault
         let cpi_ctx = CpiContext::new_with_signer(
@@ -125,7 +125,7 @@ pub mod sol_betting_game {
         let user_share = amount - owner_share;
         
         // Подготавливаем контекст для перевода токенов из winners_vault на аккаунт владельца
-        let seeds = &[b"winners_vault".as_ref(), &[_bump]];
+        let seeds = &[b"winners_vault_vo".as_ref(), &[_bump]];
         let signer_seeds = &[&seeds[..]];
         
         let cpi_ctx_owner = CpiContext::new_with_signer(
@@ -163,7 +163,7 @@ pub mod sol_betting_game {
         require!(config.owner == *ctx.accounts.owner.key, ErrorCode::Unauthorized);
     
         
-        let seeds = &[b"winners_vault".as_ref(), &[_bump]];
+        let seeds = &[b"winners_vault_vo".as_ref(), &[_bump]];
         let signer_seeds = &[&seeds[..]];
         let cpi_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -214,7 +214,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        seeds = [b"winners_vault"],
+        seeds = [b"winners_vault_vo"],
         bump,
         token::mint = mint,
         token::authority = winners_vault, // Указываем PDA как владельца
@@ -223,7 +223,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        seeds = [b"vault_account"],
+        seeds = [b"vault_account_vo"],
         bump,
         token::mint = mint,
         token::authority = vault_account,
@@ -239,7 +239,7 @@ pub struct Initialize<'info> {
 pub struct Deposit<'info> {
     #[account(
         mut,
-        seeds = [b"vault_account"],
+        seeds = [b"vault_account_vo"],
         bump
     )]
     pub vault_account: Account<'info, TokenAccount>,
@@ -264,7 +264,7 @@ pub struct DrawWinner<'info> {
     pub round_info: Account<'info, RoundInfo>,
     #[account(
         mut,
-        seeds = [b"vault_account"],
+        seeds = [b"vault_account_vo"],
         bump,
     )]
     pub vault_account: Account<'info, TokenAccount>, // PDA токенов для хранения депозита
@@ -272,7 +272,7 @@ pub struct DrawWinner<'info> {
     pub winners: Account<'info, Winners>, // Аккаунт для хранения данных о победителях
     #[account(
         mut,
-        seeds = [b"winners_vault"],
+        seeds = [b"winners_vault_vo"],
         bump,
     )]
     pub winners_vault: Account<'info, TokenAccount>, // PDA токенов для выигрышей
@@ -289,7 +289,7 @@ pub struct ClaimReward<'info> {
     pub winners: Account<'info, Winners>, // Аккаунт для хранения данных о победителях
     #[account(
         mut,
-        seeds = [b"winners_vault"],
+        seeds = [b"winners_vault_vo"],
         bump,
     )]
     pub winners_vault: Account<'info, TokenAccount>, // PDA токенов для выигрышей
@@ -309,7 +309,7 @@ pub struct AdminWithdraw<'info> {
     pub config: Account<'info, Config>,
     #[account(
         mut,
-        seeds = [b"winners_vault"],
+        seeds = [b"winners_vault_vo"],
         bump,
     )]
     pub winners_vault: Account<'info, TokenAccount>,
@@ -327,6 +327,7 @@ pub struct ChangeOwner<'info> {
     #[account(mut)]
     pub current_owner: Signer<'info>,
 }
+
 
 // Структура конфигурации
 #[account]
