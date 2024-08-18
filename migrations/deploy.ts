@@ -29,13 +29,13 @@ async function main() {
 
     // Генерация аккаунтов
     const [vaultAccount, vaultBump] = await PublicKey.findProgramAddress(
-        [Buffer.from("vault_account_vo")],
+        [Buffer.from("vault_account_vvv")],
         programId
     );
     console.log("Vault Account создан:", vaultAccount.toBase58(), "Bump:", vaultBump);
 
     const [winnersVault, winnersVaultBump] = await PublicKey.findProgramAddress(
-        [Buffer.from("winners_vault_vo")],
+        [Buffer.from("winners_vault_vvv")],
         programId
     );
     console.log("Winners Vault создан:", winnersVault.toBase58(), "Bump:", winnersVaultBump);
@@ -53,7 +53,7 @@ async function main() {
     console.log("Создание нового токена");
     const mint = _deploymentData.mint;
     // Keypair.generate();
-    console.log("Mint Keypair создан:", mint.publicKey.toBase58());
+    console.log("Mint Keypair создан:", mint.publicKey);
 
     // const mintRent = await connection.getMinimumBalanceForRentExemption(MintLayout.span);
     // console.log("Mint Rent Exemption:", mintRent);
@@ -77,7 +77,7 @@ async function main() {
     // console.log("Отправка транзакции на создание нового токена");
     // await provider.sendAndConfirm(createMintTransaction, [mint]);
 
-    console.log("Mint создан:", mint.publicKey.toBase58());
+    console.log("Mint создан:", mint.publicKey);
 
     // Создание 4-х кошельков для игроков
     console.log("Генерация 4-х кошельков для игроков");
@@ -87,7 +87,7 @@ async function main() {
     
     const players: {keypair: Keypair, tokenAccount: PublicKey}[] = _deploymentData.players.map((playerData: any) => {
         const keypair = Keypair.fromSecretKey(Uint8Array.from(playerData.secretKey));
-        console.log(`Player  Public Key: ${playerData.publicKey.toBase58()}`);
+        console.log(`Player  Public Key: ${playerData.publicKey}`);
         return {
             keypair,
             tokenAccount: new PublicKey(playerData.tokenAccount)
@@ -97,12 +97,12 @@ async function main() {
     // Создание токен-аккаунтов для овнера и игроков
     console.log("Создание токен-аккаунтов для овнера и игроков");
 
-    const ownerTokenAccount = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, mint.publicKey, wallet.publicKey);
+    const ownerTokenAccount = await getOrCreateAssociatedTokenAccount(provider.connection, wallet.payer, new PublicKey(mint.publicKey), wallet.publicKey);
     console.log("Owner Token Account создан:", ownerTokenAccount.address.toBase58());
 
     const playerTokenAccounts = [];
     for (let i = 0; i < players.length; i++) {
-        const playerTokenAccount = await getOrCreateAssociatedTokenAccount(provider.connection, players[i].keypair, mint.publicKey, players[i].keypair.publicKey);
+        const playerTokenAccount = await getOrCreateAssociatedTokenAccount(provider.connection, players[i].keypair, new PublicKey(mint.publicKey), players[i].keypair.publicKey);
         console.log(`Player ${i + 1} Token Account создан:`, playerTokenAccount.address.toBase58());
         playerTokenAccounts.push(playerTokenAccount);
     }
@@ -110,11 +110,11 @@ async function main() {
     // Mint токенов овнеру и игрокам
     const mintAmount = 1000 * 10 ** 9; // 1000 токенов с учетом decimals
     console.log("Минтинг токенов овнеру и игрокам");
-    await mintTo(connection, wallet.payer, mint.publicKey, ownerTokenAccount.address, wallet.publicKey, mintAmount);
+    await mintTo(connection, wallet.payer, new PublicKey(mint.publicKey), ownerTokenAccount.address, wallet.publicKey, mintAmount);
     console.log("Овнеру заминчено:", mintAmount);
 
     for (let i = 0; i < players.length; i++) {
-        await mintTo(connection, wallet.payer, mint.publicKey, playerTokenAccounts[i], wallet.publicKey, mintAmount);
+        await mintTo(connection, wallet.payer, new PublicKey(mint.publicKey), playerTokenAccounts[i].address, wallet.publicKey, mintAmount);
         console.log(`Player ${i + 1} заминчено:`, mintAmount);
     }
 
@@ -127,7 +127,7 @@ async function main() {
             owner: wallet.publicKey,
             winnersVault: winnersVault,
             vaultAccount: vaultAccount,
-            mint: mint.publicKey,
+            mint: new PublicKey(mint.publicKey),
             systemProgram: SystemProgram.programId,
             tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -160,7 +160,7 @@ async function main() {
             bump: winnersVaultBump,
         },
         mint: {
-            publicKey: mint.publicKey.toBase58(),
+            publicKey: new PublicKey(mint.publicKey),
             secretKey: Array.from(mint.secretKey),
         },
         owner: {
@@ -170,7 +170,7 @@ async function main() {
         players: players.map((player, index) => ({
             publicKey: player.keypair.publicKey.toBase58(),
             secretKey: Array.from(player.keypair.secretKey),
-            tokenAccount: playerTokenAccounts[index].toBase58(),
+            tokenAccount: playerTokenAccounts[index].address,
         })),
     };
 
