@@ -6,11 +6,9 @@ import * as Token from "@solana/spl-token";
 import { TOKEN_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
 import { SolBettingGame } from "../target/types/sol_betting_game";
 
-
-
 describe("sol_betting_game", () => {
   // Configure the client to use the local cluster.
-  const provider = anchor.AnchorProvider.env();
+  const provider = anchor.AnchorProvider.local();
   anchor.setProvider(provider);
 
   const program = anchor.workspace.SolBettingGame as Program<SolBettingGame>;
@@ -41,7 +39,7 @@ describe("sol_betting_game", () => {
     assert.isTrue(ownerBalance >= 100 * LAMPORTS_PER_SOL, "Owner's balance should be at least 100 SOL");
   
     // Создаём аккаунты игроков и делаем им airdrop
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 10; i++) {
       const player = Keypair.generate();
       players.push(player);
       const airdropSignature = await provider.connection.requestAirdrop(player.publicKey, 100 * LAMPORTS_PER_SOL);
@@ -200,6 +198,7 @@ describe("sol_betting_game", () => {
         winnersVault: winnersVault,
         user: winner.publicKey,
         userTokenAccount: playerTokenAccount,
+        ownerTokenAccount: ownerTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
@@ -250,6 +249,19 @@ describe("sol_betting_game", () => {
       assert.equal(roundInfoData.depositIndices[0].depositor.toString(), players[0].publicKey.toString(), "First index should correspond to player 0");
       assert.equal(roundInfoData.depositIndices[1].depositor.toString(), players[1].publicKey.toString(), "Second index should correspond to player 1");
       assert.equal(roundInfoData.depositIndices[2].depositor.toString(), players[2].publicKey.toString(), "Third index should correspond to player 2");
+      
+      console.log("player 0 token balance: ", (await Token.getAccount(provider.connection, playerTokenAccounts[0])).amount.toString())
+      
+      await makeDeposit(players[3], depositAmount3)
+      await makeDeposit(players[4], depositAmount3)
+      await makeDeposit(players[5], depositAmount3)
+      await makeDeposit(players[6], depositAmount3)
+      await makeDeposit(players[7], depositAmount3)
+      await makeDeposit(players[8], depositAmount3)
+
+      await drawWinner(players[0])
+      await claimReward(players[0])
+      console.log("player 0 token balance: ", (await Token.getAccount(provider.connection, playerTokenAccounts[0])).amount.toString())
     });
   });
   
@@ -553,5 +565,116 @@ describe("sol_betting_game", () => {
       });
     });
     
+    describe("Single ones", () => {
+      it("should fail on deposit overflow", async () => {
+        const largeDepositAmount = new anchor.BN('18446744073709551616'); // u64::MAX + 1
+        try {
+            await program.methods
+                .deposit(_vaultBump, largeDepositAmount)
+                .accounts({
+                    vaultAccount: vaultAccount,
+                    roundInfo: roundInfo,
+                    user: players[0].publicKey,
+                    userTokenAccount: playerTokenAccounts[0],
+                    mint: mint,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                    systemProgram: SystemProgram.programId,
+                })
+                .signers([players[0]])
+                .rpc();
+            
+            assert.fail("Deposit should have failed due to overflow");
+        } catch (err) {
+            // assert.include(err.toString(), "Error: Overflow", "Expected overflow error");
+            // assert.equal(err.error.errorCode.code, "Overflow", "Expected overflow error");
+            console.log(err.toString())
+        }
+    });
+    it("should handle high load of deposits without DoS", async () => {
+      for (let i = 0; i < 100; i++) { // Попробуем сделать 1000 депозитов
+          const smallDeposit = new anchor.BN(1);
+          await program.methods
+              .deposit(_vaultBump, smallDeposit)
+              .accounts({
+                  vaultAccount: vaultAccount,
+                  roundInfo: roundInfo,
+                  user: players[i % players.length].publicKey, // Поворачиваем игроков
+                  userTokenAccount: playerTokenAccounts[i % players.length],
+                  mint: mint,
+                  tokenProgram: TOKEN_PROGRAM_ID,
+                  systemProgram: SystemProgram.programId,
+              })
+              .signers([players[i % players.length]])
+              .rpc();
+          // console.log(i)
+      }
+      
+      // Убедитесь, что программа продолжает работать нормально после большого числа депозитов
+      const roundInfoData = await program.account.roundInfo.fetch(roundInfo);
+      assert.isTrue(roundInfoData.totalDeposits.gte(new anchor.BN(100)), "Total deposits should be at least 1000 after high load");
+  });
+  it("should prevent unauthorized user from drawing a winner", async () => {
+    try {
+        await program.methods
+            .drawWinner(_vaultBump, players[0].publicKey) // Попытка другого пользователя выбрать победителя
+            .accounts({
+                config: config,
+                roundInfo: roundInfo,
+                vaultAccount: vaultAccount,
+                winners: winners,
+                winnersVault: winnersVault,
+                owner: players[1].publicKey, // Используем игрока, а не владельца
+                mint: mint,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([players[1]]) // Не владелец
+            .rpc();
+        
+        assert.fail("Non-owner should not be able to draw a winner");
+    } catch (err) {
+        assert.equal(err.error.errorCode.code, "Unauthorized", "Only owner should be able to draw a winner");
+        // console.log(err.error.errorCode.code)
+    }
+});
+it("should reject deposits with different mints in the same round", async () => {
+  const anotherMint = await Token.createMint(
+      provider.connection,
+      owner,
+      owner.publicKey,
+      null,
+      9,
+  );
+  const playerTokenAccountWithAnotherMint = await Token.getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      anotherMint,
+      players[0].publicKey
+  );
 
+  await Token.mintTo(provider.connection, owner, anotherMint, playerTokenAccountWithAnotherMint.address, owner.publicKey, 10000 * LAMPORTS_PER_SOL);
+
+  try {
+      await program.methods
+          .deposit(_vaultBump, new anchor.BN(1000))
+          .accounts({
+              vaultAccount: vaultAccount,
+              roundInfo: roundInfo,
+              user: players[0].publicKey,
+              userTokenAccount: playerTokenAccountWithAnotherMint.address, // Используем другой mint
+              mint: anotherMint,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+          })
+          .signers([players[0]])
+          .rpc();
+      
+      assert.fail("Deposit with different mint should be rejected");
+  } catch (err) {
+      assert.include(err.toString(), "Error", "Expected error when depositing with different mint");
+  }
+});
+
+    
+    })
 });

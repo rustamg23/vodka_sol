@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
-declare_id!("8FFkzD327EcqEViecB8eJC3JE4zDso3rq4UjeZSTwiNy");
+declare_id!("9VR2nRtwUNVR52HTqfWycxKUG1rfHtDnH16Xfqksyp72");
 
 #[program]
 pub mod sol_betting_game {
@@ -21,16 +21,18 @@ pub mod sol_betting_game {
         Ok(())
     }
 
-    // Депозит токенов в текущий раунд
     pub fn deposit(ctx: Context<Deposit>, _bump: u8, amount: u64) -> Result<()> {
         let round_info = &mut ctx.accounts.round_info;
-
+    
         require!(round_info.is_round_open, ErrorCode::RoundClosed);
         require!(amount > 0, ErrorCode::InvalidDeposit);
-
+    
+        // Проверка переполнения
+        let new_total_deposits = round_info.total_deposits.checked_add(amount).ok_or(ErrorCode::Overflow)?;
+    
         if let Some(index) = round_info.deposit_indices.iter().position(|x| x.depositor == *ctx.accounts.user.key) {
             let deposit_index = round_info.deposit_indices[index].index as usize;
-            round_info.deposits[deposit_index].token_amount += amount;
+            round_info.deposits[deposit_index].token_amount = round_info.deposits[deposit_index].token_amount.checked_add(amount).ok_or(ErrorCode::Overflow)?;
         } else {
             let new_index = round_info.deposits.len();
             round_info.deposits.push(Tokens {
@@ -43,9 +45,9 @@ pub mod sol_betting_game {
                 index: new_index as u64,
             });
         }
-
-        round_info.total_deposits += amount;
-
+    
+        round_info.total_deposits = new_total_deposits;
+    
         let cpi_ctx = CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             token::Transfer {
@@ -54,18 +56,17 @@ pub mod sol_betting_game {
                 authority: ctx.accounts.user.to_account_info(),
             },
         );
-
-        token::transfer(
-            cpi_ctx,
-            amount,
-        )?;
-
+    
+        token::transfer(cpi_ctx, amount)?;
+    
         Ok(())
     }
+    
 
     pub fn draw_winner(ctx: Context<DrawWinner>, _bump: u8, winner_pubkey: Pubkey) -> Result<()> {
+        let config = &mut ctx.accounts.config;
         let round_info = &mut ctx.accounts.round_info;
-    
+        require!(config.owner == *ctx.accounts.owner.key, ErrorCode::Unauthorized);
         require!(round_info.is_round_open, ErrorCode::RoundClosed);
         require!(round_info.deposits.len() > 0, ErrorCode::NoDeposits);
     
@@ -89,7 +90,7 @@ pub mod sol_betting_game {
     
         // Запись победителя и его приза в аккаунт winners
         if let Some(winner_record) = ctx.accounts.winners.records.iter_mut().find(|record| record.winner == winner_pubkey) {
-            winner_record.amount += prize;
+            winner_record.amount.checked_add(prize).ok_or(ErrorCode::Overflow)?;
         } else {
             ctx.accounts.winners.records.push(WinnerRecord {
                 winner: winner_pubkey,
@@ -111,34 +112,51 @@ pub mod sol_betting_game {
     pub fn claim_reward(ctx: Context<ClaimReward>, _bump: u8) -> Result<()> {
         let winners = &mut ctx.accounts.winners;
         let user = &ctx.accounts.user;
-    
+        
         // Проверяем, что игрок является победителем
         let winner_record = winners.records.iter().find(|record| record.winner == *user.key);
         require!(winner_record.is_some(), ErrorCode::NoPrize);
-    
+        
         let amount = winner_record.unwrap().amount;
         require!(amount > 0, ErrorCode::NoPrize);
-    
-        // Подготавливаем контекст для перевода токенов из winners_vault на аккаунт игрока
+        
+        // Расчет 5% для владельца и 95% для пользователя
+        let owner_share = amount * 5 / 100;
+        let user_share = amount - owner_share;
+        
+        // Подготавливаем контекст для перевода токенов из winners_vault на аккаунт владельца
         let seeds = &[b"winners_vault".as_ref(), &[_bump]];
         let signer_seeds = &[&seeds[..]];
-    
-        let cpi_ctx = CpiContext::new_with_signer(
+        
+        let cpi_ctx_owner = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             token::Transfer {
                 from: ctx.accounts.winners_vault.to_account_info(),
-                to: ctx.accounts.user_token_account.to_account_info(),
+                to: ctx.accounts.owner_token_account.to_account_info(), // Аккаунт владельца
                 authority: ctx.accounts.winners_vault.to_account_info(), // PDA выступает authority
             },
             signer_seeds,
         );
-        token::transfer(cpi_ctx, amount)?;
-    
+        token::transfer(cpi_ctx_owner, owner_share)?;
+        
+        // Подготавливаем контекст для перевода токенов из winners_vault на аккаунт игрока
+        let cpi_ctx_user = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::Transfer {
+                from: ctx.accounts.winners_vault.to_account_info(),
+                to: ctx.accounts.user_token_account.to_account_info(), // Аккаунт игрока
+                authority: ctx.accounts.winners_vault.to_account_info(), // PDA выступает authority
+            },
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx_user, user_share)?;
+        
         // Удаляем запись о победителе после получения приза
         winners.records.retain(|record| record.winner != *user.key);
-    
+        
         Ok(())
     }
+    
 
     pub fn admin_withdraw(ctx: Context<AdminWithdraw>, _bump: u8, amount: u64) -> Result<()> {
         let config = &ctx.accounts.config;
@@ -176,7 +194,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + 32 + 8 + 4 + 400,  // Размер под RoundInfo
+        space = 4096,  // Размер под RoundInfo
     )]
     pub round_info: Account<'info, RoundInfo>,
     #[account(
@@ -188,7 +206,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + 4 + 400 * 10,  // Пространство для хранения списка победителей
+        space = 4096,  // Пространство для хранения списка победителей
     )]
     pub winners: Account<'info, Winners>, // Аккаунт для хранения данных о победителях
     #[account(mut)]
@@ -279,6 +297,8 @@ pub struct ClaimReward<'info> {
     pub user: Signer<'info>, // Игрок, который забирает приз
     #[account(mut)]
     pub user_token_account: Account<'info, TokenAccount>, // Аккаунт, на который будут переведены токены
+    #[account(mut)]
+    pub owner_token_account: Account<'info, TokenAccount>, // Аккаунт владельца для получения 5%
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -371,4 +391,6 @@ pub enum ErrorCode {
     AlreadyInitialized,
     #[msg("The operation is paused.")]
     Paused,
+    #[msg("Expected overflow error")]
+    Overflow,
 }
