@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
-declare_id!("9VR2nRtwUNVR52HTqfWycxKUG1rfHtDnH16Xfqksyp72");
+declare_id!("6f2TEQ8Vva4J3dmRnQ5VLYXUUysJb6Gab8yUCjhWK2Ds");
 
 #[program]
 pub mod sol_betting_game {
