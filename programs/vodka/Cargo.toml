@@ -8,10 +8,6 @@ edition = "2021"
 crate-type = ["cdylib", "lib"]
 name = "sol_betting_game"
 
-[profile.release]
-opt-level = "z"  # Оптимизация для размера
-lto = true  # Включение Link Time Optimization
-codegen-units = 1  # Уменьшение числа единиц генерации кода для улучшения оптимизации
 
 [features]
 no-entrypoint = []
@@ -23,3 +19,4 @@ default = []
 [dependencies]
 anchor-lang = {version = "0.28.0"}
 anchor-spl = "0.28.0"
+ahash = "=0.8.6"

@@ -10,10 +10,8 @@ sol_betting_game = "9VR2nRtwUNVR52HTqfWycxKUG1rfHtDnH16Xfqksyp72"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "/Users/rustam/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/sol_betting_game.ts"
-deployyy = "yarn run ts-node ./migrations/deploy.ts"
-inter = "yarn run ts-node ./migrations/interact.ts"
