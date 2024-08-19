@@ -11,6 +11,7 @@ pub mod sol_betting_game {
     pub fn initialize(ctx: Context<Initialize>, owner: Pubkey) -> Result<()> {
         let config = &mut ctx.accounts.config;
         require!(config.owner == Pubkey::default(), ErrorCode::AlreadyInitialized);
+        require!(owner != Pubkey::default(), ErrorCode::Unauthorized);
         config.owner = *ctx.accounts.owner.key;
         config.current_round = 0;
 
@@ -42,7 +43,7 @@ pub mod sol_betting_game {
             });
             round_info.deposit_indices.push(DepositIndex {
                 depositor: *ctx.accounts.user.key,
-                index: new_index as u64,
+                index: new_index as u16,
             });
         }
     
@@ -333,7 +334,7 @@ pub struct ChangeOwner<'info> {
 #[account]
 pub struct Config {
     pub owner: Pubkey,
-    pub current_round: u64,
+    pub current_round: u16,
 }
 
 // Структура для хранения информации о текущем раунде
@@ -370,7 +371,7 @@ pub struct Tokens {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct DepositIndex {
     pub depositor: Pubkey,
-    pub index: u64,
+    pub index: u16,
 }
 
 // Коды ошибок
