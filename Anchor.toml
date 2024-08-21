@@ -1,16 +1,18 @@
 [features]
 seeds = false
 skip-lint = false
+[programs.mainnet]
+sol_betting_game = "CfjtNRosShHzVXAh9EJ72j8DvZqVjda6HnUauQuE9Bb3"
 [programs.localnet]
-sol_betting_game = "6f2TEQ8Vva4J3dmRnQ5VLYXUUysJb6Gab8yUCjhWK2Ds"
+sol_betting_game = "CfjtNRosShHzVXAh9EJ72j8DvZqVjda6HnUauQuE9Bb3"
 [programs.devnet]
-sol_betting_game = "6f2TEQ8Vva4J3dmRnQ5VLYXUUysJb6Gab8yUCjhWK2Ds"
+sol_betting_game = "CfjtNRosShHzVXAh9EJ72j8DvZqVjda6HnUauQuE9Bb3"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "mainnet"
 wallet = "/Users/rustam/.config/solana/id.json"
 
 [scripts]

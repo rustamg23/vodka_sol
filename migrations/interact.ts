@@ -12,7 +12,9 @@ async function main() {
     const deploymentData = JSON.parse(fs.readFileSync(path.resolve(__dirname, "deployment_output.json"), "utf8"));
 
     console.log("Установка соединения и провайдера");
-    const connection = new anchor.web3.Connection("https://api.devnet.solana.com", "confirmed");
+    // const connection = new anchor.web3.Connection("https://api.mainnet-beta.solana.com", "confirmed");
+    const connection = new anchor.web3.Connection("https://mainnet.helius-rpc.com/?api-key=1bc037fc-eee1-4625-8561-843259f2d76d", "confirmed");
+
     const wallet = anchor.Wallet.local();
     const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
     anchor.setProvider(provider);
@@ -48,8 +50,8 @@ async function main() {
 
         const initialPlayerBalance = (await getAccount(provider.connection, player.tokenAccount)).amount.toString();
 
-        await delay(1000);
-        console.log("TX: ", await program.methods.deposit(vaultBump, new anchor.BN(10**10 * 2))
+        await delay(1500);
+        console.log("TX: ", await program.methods.deposit(vaultBump, new anchor.BN(10**6 * 2))
             .accounts({
                 vaultAccount: vaultAccount,
                 roundInfo: roundInfoAccount,
@@ -117,7 +119,7 @@ async function main() {
         const initialPlayerBalance = (await getAccount(provider.connection, player.tokenAccount)).amount.toString();
 
         await delay(1000);
-        console.log("TX: ", await program.methods.deposit(vaultBump, new anchor.BN(10**10 * 2))
+        console.log("TX: ", await program.methods.deposit(vaultBump, new anchor.BN(10**6 * 3))
             .accounts({
                 vaultAccount: vaultAccount,
                 roundInfo: roundInfoAccount,

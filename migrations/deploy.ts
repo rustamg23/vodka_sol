@@ -4,12 +4,12 @@ import { TOKEN_PROGRAM_ID, MintLayout, createInitializeMintInstruction, createAs
 import fs from "fs";
 import path from "path";
 
+
 async function main() {
     // Установка соединения с локальным узлом Solana
-    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+    const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
     console.log("Соединение с локальным узлом установлено");
     const _deploymentData = JSON.parse(fs.readFileSync(path.resolve(__dirname, "deployment_output.json"), "utf8"));
-
     // Генерация или загрузка ключей для деплоя
     const wallet = anchor.Wallet.local();
     const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
@@ -25,17 +25,19 @@ async function main() {
     const programId = programKeypair.publicKey;
     const program = new anchor.Program(programIdl, programId, provider);
 
+    console.log("Идентификатор программы:", programId.toBase58());
+
     console.log("Program ID:", programId.toBase58());
 
     // Генерация аккаунтов
     const [vaultAccount, vaultBump] = await PublicKey.findProgramAddress(
-        [Buffer.from("vault_account_vvv")],
+        [Buffer.from("vault_account_v")],
         programId
     );
     console.log("Vault Account создан:", vaultAccount.toBase58(), "Bump:", vaultBump);
 
     const [winnersVault, winnersVaultBump] = await PublicKey.findProgramAddress(
-        [Buffer.from("winners_vault_vvv")],
+        [Buffer.from("winners_vault_v")],
         programId
     );
     console.log("Winners Vault создан:", winnersVault.toBase58(), "Bump:", winnersVaultBump);
@@ -77,7 +79,7 @@ async function main() {
     // console.log("Отправка транзакции на создание нового токена");
     // await provider.sendAndConfirm(createMintTransaction, [mint]);
 
-    console.log("Mint создан:", mint.publicKey);
+    console.log("Mint найден:", mint.publicKey);
 
     // Создание 4-х кошельков для игроков
     console.log("Генерация 4-х кошельков для игроков");
@@ -108,15 +110,15 @@ async function main() {
     }
 
     // Mint токенов овнеру и игрокам
-    const mintAmount = 1000 * 10 ** 9; // 1000 токенов с учетом decimals
-    console.log("Минтинг токенов овнеру и игрокам");
-    await mintTo(connection, wallet.payer, new PublicKey(mint.publicKey), ownerTokenAccount.address, wallet.publicKey, mintAmount);
-    console.log("Овнеру заминчено:", mintAmount);
+    // const mintAmount = 1000 * 10 ** 9; // 1000 токенов с учетом decimals
+    console.log("Не Минтинг токенов овнеру и игрокам");
+    // await mintTo(connection, wallet.payer, new PublicKey(mint.publicKey), ownerTokenAccount.address, wallet.publicKey, mintAmount);
+    // console.log("Овнеру заминчено:", mintAmount);
 
-    for (let i = 0; i < players.length; i++) {
-        await mintTo(connection, wallet.payer, new PublicKey(mint.publicKey), playerTokenAccounts[i].address, wallet.publicKey, mintAmount);
-        console.log(`Player ${i + 1} заминчено:`, mintAmount);
-    }
+    // for (let i = 0; i < players.length; i++) {
+    //     await mintTo(connection, wallet.payer, new PublicKey(mint.publicKey), playerTokenAccounts[i].address, wallet.publicKey, mintAmount);
+    //     console.log(`Player ${i + 1} заминчено:`, mintAmount);
+    // }
 
     console.log("Вызов инициализации программы");
     await program.methods.initialize(wallet.publicKey)
@@ -132,7 +134,8 @@ async function main() {
             tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([configAccount, roundInfoAccount, winnersAccount, wallet.payer])
-        .rpc();
+        .rpc({
+        });
 
     console.log("Программа инициализирована с аккаунтом конфигурации:", configAccount.publicKey.toBase58());
 
@@ -161,7 +164,7 @@ async function main() {
         },
         mint: {
             publicKey: new PublicKey(mint.publicKey),
-            secretKey: Array.from(mint.secretKey),
+            // secretKey: Array.from(mint.secretKey),
         },
         owner: {
             publicKey: wallet.publicKey.toBase58(),
