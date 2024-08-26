@@ -1,7 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
-declare_id!("7RefDecfkL7EMinspCf3YxUyvpJQDpbmbFnBefnfZaHf");
+declare_id!("5xs7Wco75e1tJfuSqb72992SqDZBEVxW1CMhUZg7x9G8");
+
+
 
 #[program]
 pub mod sol_betting_game {
@@ -68,7 +70,7 @@ pub mod sol_betting_game {
         let config = &mut ctx.accounts.config;
         let round_info = &mut ctx.accounts.round_info;
         require!(config.owner == *ctx.accounts.owner.key, ErrorCode::Unauthorized);
-        require!(round_info.is_round_open, ErrorCode::RoundClosed);
+        require!(round_info.is_round_open == false, ErrorCode::RoundClosed);
         require!(round_info.deposits.len() > 0, ErrorCode::NoDeposits);
     
         let prize = round_info.total_deposits;
@@ -186,6 +188,15 @@ pub mod sol_betting_game {
         config.owner = new_owner;
         Ok(())
     }
+
+    pub fn flip_round(ctx: Context<FlipRound>) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        let round_info = &mut ctx.accounts.round_info;
+        require!(config.owner == *ctx.accounts.owner.key, ErrorCode::Unauthorized);
+        round_info.is_round_open = !(round_info.is_round_open);
+        Ok(())
+    }
+
 }
 
 // Аккаунты для инициализации программы
@@ -327,6 +338,16 @@ pub struct ChangeOwner<'info> {
     pub config: Account<'info, Config>,
     #[account(mut)]
     pub current_owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct FlipRound<'info> {
+    #[account(mut)]
+    pub config: Account<'info, Config>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut)]
+    pub round_info: Account<'info, RoundInfo>,
 }
 
 

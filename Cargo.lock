@@ -1748,6 +1748,7 @@ dependencies = [
  "ahash 0.8.6",
  "anchor-lang",
  "anchor-spl",
+ "solana-program",
 ]
 
 [[package]]

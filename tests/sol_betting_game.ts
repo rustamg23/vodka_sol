@@ -223,6 +223,16 @@ describe("sol_betting_game", () => {
     return roundInfoData;
   }
   async function drawWinner(winner: Keypair) {
+    await program.methods
+      .flipRound()
+      .accounts({
+        config: config,
+        roundInfo: roundInfo,
+        owner: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc()
+    
     console.log("drawing winner and his prize is: ", parseInt((await Token.getAccount(provider.connection, vaultAccount)).amount.toString()) * 0.95/10**9);
     await program.methods
       .drawWinner(_vaultBump, winner.publicKey)

@@ -2,13 +2,13 @@
 seeds = false
 skip-lint = false
 [programs.devnet]
-sol_betting_game = "7RefDecfkL7EMinspCf3YxUyvpJQDpbmbFnBefnfZaHf"
+sol_betting_game = "5xs7Wco75e1tJfuSqb72992SqDZBEVxW1CMhUZg7x9G8"
 
 [programs.localnet]
-sol_betting_game = "7RefDecfkL7EMinspCf3YxUyvpJQDpbmbFnBefnfZaHf"
+sol_betting_game = "5xs7Wco75e1tJfuSqb72992SqDZBEVxW1CMhUZg7x9G8"
 
 [programs.mainnet]
-sol_betting_game = "7RefDecfkL7EMinspCf3YxUyvpJQDpbmbFnBefnfZaHf"
+sol_betting_game = "5xs7Wco75e1tJfuSqb72992SqDZBEVxW1CMhUZg7x9G8"
 
 [registry]
 url = "https://api.apr.dev"

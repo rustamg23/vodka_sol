@@ -7,7 +7,7 @@ import path from "path";
 
 async function main() {
     // Установка соединения с локальным узлом Solana
-    const connection = new Connection("https://mainnet.helius-rpc.com/?api-key=", "confirmed");
+    const connection = new Connection("https://serene-quick-sailboat.solana-mainnet.quiknode.pro/08642de73cfec06684a0ab751ca351283a976fbc", "confirmed");
     console.log("Соединение с локальным узлом установлено");
     const _deploymentData = JSON.parse(fs.readFileSync(path.resolve(__dirname, "deployment_output.json"), "utf8"));
     // Генерация или загрузка ключей для деплоя
@@ -33,13 +33,13 @@ async function main() {
     console.log("Program ID:", programId.toBase58());
 
     // Генерация аккаунтов
-    const [vaultAccount, vaultBump] = await PublicKey.findProgramAddress(
+    const [vaultAccount, vaultBump] =  PublicKey.findProgramAddressSync(
         [Buffer.from("vault_account_v")],
         programId
     );
     console.log("Vault Account создан:", vaultAccount.toBase58(), "Bump:", vaultBump);
 
-    const [winnersVault, winnersVaultBump] = await PublicKey.findProgramAddress(
+    const [winnersVault, winnersVaultBump] = PublicKey.findProgramAddressSync(
         [Buffer.from("winners_vault_v")],
         programId
     );
