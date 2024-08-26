@@ -13,7 +13,7 @@ async function main() {
 
     console.log("Установка соединения и провайдера");
     // const connection = new anchor.web3.Connection("https://api.mainnet-beta.solana.com", "confirmed");
-    const connection = new anchor.web3.Connection("https://mainnet.helius-rpc.com/?api-key=1bc037fc-eee1-4625-8561-843259f2d76d", "confirmed");
+    const connection = new anchor.web3.Connection("https://mainnet.helius-rpc.com/?api-key=", "confirmed");
 
     const wallet = anchor.Wallet.local();
     const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });

@@ -1,5 +1,5 @@
 import * as anchor from "@project-serum/anchor";
-import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { Connection, Keypair as kp, PublicKey, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, MintLayout, createInitializeMintInstruction, createAssociatedTokenAccountInstruction, mintTo, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
 import fs from "fs";
 import path from "path";
@@ -7,18 +7,21 @@ import path from "path";
 
 async function main() {
     // Установка соединения с локальным узлом Solana
-    const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
+    const connection = new Connection("https://mainnet.helius-rpc.com/?api-key=", "confirmed");
     console.log("Соединение с локальным узлом установлено");
     const _deploymentData = JSON.parse(fs.readFileSync(path.resolve(__dirname, "deployment_output.json"), "utf8"));
     // Генерация или загрузка ключей для деплоя
-    const wallet = anchor.Wallet.local();
+    console.log("kek", _deploymentData.owner)
+    const owner = kp.fromSecretKey(Buffer.from(_deploymentData.owner.secretKey, "base64"));
+    console.log(owner)
+    const wallet = new anchor.Wallet(owner);
     const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
     anchor.setProvider(provider);
     console.log("Провайдер установлен с кошельком:", wallet.publicKey.toBase58());
 
     // Чтение скомпилированного файла программы
     const programIdl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/sol_betting_game.json"), "utf8"));
-    const programKeypair = Keypair.fromSecretKey(
+    const programKeypair = kp.fromSecretKey(
         Buffer.from(JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/deploy/sol_betting_game-keypair.json"), "utf8")))
     );
 
@@ -43,13 +46,13 @@ async function main() {
     console.log("Winners Vault создан:", winnersVault.toBase58(), "Bump:", winnersVaultBump);
 
     console.log("Создание аккаунта конфигурации");
-    const configAccount = Keypair.generate();
+    const configAccount = kp.generate();
     console.log("Config Account:", configAccount.publicKey.toBase58());
 
-    const roundInfoAccount = Keypair.generate();
+    const roundInfoAccount = kp.generate();
     console.log("Round Info Account:", roundInfoAccount.publicKey.toBase58());
 
-    const winnersAccount = Keypair.generate();
+    const winnersAccount = kp.generate();
     console.log("Winners Account:", winnersAccount.publicKey.toBase58());
 
     console.log("Создание нового токена");
@@ -87,8 +90,8 @@ async function main() {
     // players.forEach((player, index) => {
     // });
     
-    const players: {keypair: Keypair, tokenAccount: PublicKey}[] = _deploymentData.players.map((playerData: any) => {
-        const keypair = Keypair.fromSecretKey(Uint8Array.from(playerData.secretKey));
+    const players: {keypair: kp, tokenAccount: PublicKey}[] = _deploymentData.players.map((playerData: any) => {
+        const keypair = kp.fromSecretKey(Uint8Array.from(playerData.secretKey));
         console.log(`Player  Public Key: ${playerData.publicKey}`);
         return {
             keypair,

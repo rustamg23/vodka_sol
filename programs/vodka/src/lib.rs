@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
-declare_id!("CfjtNRosShHzVXAh9EJ72j8DvZqVjda6HnUauQuE9Bb3");
+declare_id!("7RefDecfkL7EMinspCf3YxUyvpJQDpbmbFnBefnfZaHf");
 
 #[program]
 pub mod sol_betting_game {
@@ -91,7 +91,7 @@ pub mod sol_betting_game {
     
         // Запись победителя и его приза в аккаунт winners
         if let Some(winner_record) = ctx.accounts.winners.records.iter_mut().find(|record| record.winner == winner_pubkey) {
-            winner_record.amount.checked_add(prize).ok_or(ErrorCode::Overflow)?;
+            winner_record.amount = winner_record.amount.checked_add(prize).ok_or(ErrorCode::Overflow)?;
         } else {
             ctx.accounts.winners.records.push(WinnerRecord {
                 winner: winner_pubkey,
